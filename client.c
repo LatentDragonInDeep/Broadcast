@@ -7,56 +7,33 @@
 #include <fcntl.h>
 
 int main(int argc,char** argv) {
-    char* ip = NULL;
-    int port = 0;
-    char* fileName = NULL;
-    //获取本机ip
-    for (int i = 1; i < argc; ++i) {
-        if(strcmp(argv[i],"-h") == 0) {
-            ip = argv[++i];
-            continue;
-        }
-        if(strcmp(argv[i],"-p") == 0) {
-            port = atoi(argv[++i]);
-            continue;
-        }
-        if(strcmp(argv[i],"-f") == 0) {
-            fileName = argv[++i];
-            continue;
-        }
-    }
     //初始化连接
     int sockFd = socket(AF_INET, SOCK_DGRAM|SOCK_NONBLOCK, IPPROTO_TCP);
     if(sockFd == -1) {
         printf("create sock failed");
         exit(1);
     }
-    struct sockaddr_in serAddr;
-    serAddr.sin_family = AF_INET;
-    serAddr.sin_port = htons((u_int16_t)port);
-    serAddr.sin_addr.s_addr = inet_addr(ip);
-    int connectFd;
-    //建立连接
-    if((connectFd = connect(sockFd, (struct sockaddr*)&serAddr, sizeof(serAddr)))<0) {
-        printf("connect to server failed");
+    struct sockaddr_in clientAddr;
+    struct sockaddr_in servAddr;
+    clientAddr.sin_family = AF_INET;
+    clientAddr.sin_port = htons((u_int16_t)12345);
+    clientAddr.sin_addr.s_addr = inet_addr(INADDR_ANY);
+    if (bind(sockFd, (struct sockaddr *)&clientAddr, sizeof(clientAddr)) == -1) {
+        printf("Bind error.");
         exit(1);
     }
-    //发送要传输的文件路径
-    int len = strlen(fileName);
-    int hasSend = 0;
-    int sended = 0;
-    while (hasSend<len) {
-        sended = send(connectFd,fileName+hasSend,len-hasSend,0);
-        hasSend+=sended;
+    char recvBuf[4];
+    int len = sizeof(servAddr);
+    while (1) {
+        int recved = recvfrom(sockFd,recvBuf,4,0,(struct sockaddr *)&servAddr,&len);
+        if (recved < 0){
+            printf("recvfrom error\n");
+            exit(1);
+        }
+        unsigned now = 0;
+        for (int i = 0; i <4; ++i) {
+            now |= (((unsigned)recvBuf[i])<<(24-i*8));
+        }
+        printf("current tiem is %d",now);
     }
-    char* ack = "ack";
-    //接收文件
-    char* recvBuf = malloc(4096);
-    int recvFileFd = open("temp.gz",O_CLOEXEC|O_CREAT|O_WRONLY);
-    int recved = 0;
-    while ((recved = recv(connectFd,recvBuf,4096,0))!=0) {
-        send(connectFd,ack,3,0);
-        write(recvFileFd,recvBuf,recved);
-    }
-    free(recvBuf);
 }
