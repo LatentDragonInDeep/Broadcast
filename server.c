@@ -17,6 +17,8 @@ typedef struct {
     int clientFd;
 } task;
 
+const int maxRetry = 3;
+
 void zipFileOrDir(const char *filePath, zipFile *zf) {
     struct stat fileStat;
     stat(filePath,&fileStat);
@@ -66,10 +68,29 @@ void exec(void * tsk) {
     zipFileOrDir(hasRecv, &zf);
     zipClose(zf,NULL);
     int zippedFile = open("temp.gz",O_RDONLY);
-    struct stat fileStat;
-    stat("temp.gz",&fileStat);
     //发送到客户端，关闭套接字
-    sendfile(t->clientFd,zippedFile,0,fileStat.st_size);
+    char sendBuf[4096];
+    char seqRecvBuf[4];
+    int readed = 0;
+    while (1) {
+        next:
+        readed = read(zippedFile,sendBuf,4096);
+        if(readed == 0) {
+            break;
+        }
+        send(t->clientFd,sendBuf,readed,0);
+        int retry = 0;
+        while (retry<maxRetry) {
+            recv(t->clientFd, seqRecvBuf, 3, 0);
+            seqRecvBuf[3] = '\0';
+            if(strcmp("ACK",seqRecvBuf)==0) {
+                memset(seqRecvBuf,'\0',4);
+                goto next;
+            }
+        }
+        printf("has not recieved client's ack!");
+        exit(1);
+    }
     close(t->clientFd);
     close(zippedFile);
     free(recvBuf);
@@ -95,7 +116,7 @@ int main() {
     servaddr.sin_family = PF_INET;
     servaddr.sin_addr.s_addr = htonl(atoi(selfIp));
     servaddr.sin_port = htons(12345);
-    int socket_fd = socket(AF_INET,SOCK_STREAM,0);
+    int socket_fd = socket(AF_INET,SOCK_DGRAM,0);
     listen(socket_fd,10);
     while (1) {
         struct sockaddr_in clientAddr;

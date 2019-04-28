@@ -26,7 +26,7 @@ int main(int argc,char** argv) {
         }
     }
     //初始化连接
-    int sockFd = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, IPPROTO_TCP);
+    int sockFd = socket(AF_INET, SOCK_DGRAM|SOCK_NONBLOCK, IPPROTO_TCP);
     if(sockFd == -1) {
         printf("create sock failed");
         exit(1);
@@ -49,11 +49,13 @@ int main(int argc,char** argv) {
         sended = send(connectFd,fileName+hasSend,len-hasSend,0);
         hasSend+=sended;
     }
+    char* ack = "ack";
     //接收文件
     char* recvBuf = malloc(4096);
     int recvFileFd = open("temp.gz",O_CLOEXEC|O_CREAT|O_WRONLY);
     int recved = 0;
     while ((recved = recv(connectFd,recvBuf,4096,0))!=0) {
+        send(connectFd,ack,3,0);
         write(recvFileFd,recvBuf,recved);
     }
     free(recvBuf);
